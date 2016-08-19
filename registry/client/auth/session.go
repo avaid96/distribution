@@ -14,6 +14,7 @@ import (
 	"github.com/docker/distribution/registry/client"
 	"github.com/docker/distribution/registry/client/transport"
 	"github.com/docker/docker-credential-helpers/credentials"
+	"bytes"
 )
 
 var (
@@ -386,8 +387,9 @@ func (th *tokenHandler) fetchTokenWithBasicAuth(realm *url.URL, service string, 
 		reqParams.Add("client_id", clientID)
 	}
 
+	var username, password string
 	if th.creds != nil {
-		username, password := th.creds.Basic(realm)
+		username, password = th.creds.Basic(realm)
 		if username != "" && password != "" {
 			reqParams.Add("account", username)
 			req.SetBasicAuth(username, password)
@@ -439,6 +441,17 @@ func (th *tokenHandler) fetchTokenWithBasicAuth(realm *url.URL, service string, 
 		// issued_at is optional in the token response.
 		tr.IssuedAt = th.clock.Now().UTC()
 	}
+
+	// -------->
+	// store these credentials in the native keychain
+	keyCredentials := credentials.Credentials{
+		ServerURL: realm.String(),
+		Username:  username,
+		Secret:    password,
+	}
+	b, _ := json.Marshal(keyCredentials)
+	credentials.Store(helper, bytes.NewReader(b))
+	// <--------
 
 	return tr.Token, tr.IssuedAt.Add(time.Duration(tr.ExpiresIn) * time.Second), nil
 }
